@@ -26,4 +26,17 @@ export default defineConfig({
     // Force re-bundle on every start so stale cache never causes issues
     force: true,
   },
+  build: {
+    // Raise the warning threshold — stellar-sdk is inherently large
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        // Split vendor libraries into a separate chunk for better caching
+        manualChunks: {
+          'stellar-sdk': ['@stellar/stellar-sdk', '@stellar/stellar-base'],
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+        },
+      },
+    },
+  },
 })
