@@ -251,3 +251,25 @@ body {
 @media (min-width: 769px) {
   .hide-desktop { display: none !important; }
 }
+
+/* Launch page: stack sidebar below form on mobile */
+@media (max-width: 768px) {
+  .launch-page-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Token detail page: stack stats on mobile */
+@media (max-width: 600px) {
+  .token-detail-stats {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* Explore page: single column on very small screens */
+@media (max-width: 480px) {
+  .explore-controls {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+}
