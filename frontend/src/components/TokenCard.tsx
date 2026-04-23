@@ -1,5 +1,6 @@
 import { ExternalLink, Copy, Check } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { type TokenInfo, formatAmount, shortenAddress } from '../lib/stellar'
 import toast from 'react-hot-toast'
 
@@ -49,7 +50,10 @@ export default function TokenCard({ token, index = 0 }: TokenCardProps) {
     >
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Link
+          to={`/explore/token/${token.address}`}
+          style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', flex: 1, minWidth: 0 }}
+        >
           <div
             style={{
               width: 44,
@@ -69,13 +73,13 @@ export default function TokenCard({ token, index = 0 }: TokenCardProps) {
           >
             {token.symbol.slice(0, 2).toUpperCase()}
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: 15, color: '#0f172a' }}>{token.name}</div>
             <div style={{ fontSize: 12, color: '#2563eb', fontWeight: 600, marginTop: 2 }}>
               ${token.symbol}
             </div>
           </div>
-        </div>
+        </Link>
         <span className="badge badge-accent">{token.decimals}dp</span>
       </div>
 
