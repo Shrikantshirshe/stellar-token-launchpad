@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ExternalLink, Rocket, CheckCircle, Info } from 'lucide-react'
+import { ExternalLink, Rocket, CheckCircle, Info, Droplets } from 'lucide-react'
 import LaunchForm from '../components/LaunchForm'
 
 const TIPS = [
@@ -11,6 +11,12 @@ const TIPS = [
 
 export default function LaunchPage() {
   const [lastTxHash, setLastTxHash] = useState<string | null>(null)
+  const [lastSymbol, setLastSymbol] = useState<string>('')
+
+  const handleSuccess = (txHash: string, symbol: string) => {
+    setLastTxHash(txHash)
+    setLastSymbol(symbol)
+  }
 
   return (
     <div style={{ background: '#f8fafc', minHeight: '100vh', paddingTop: 64 }}>
@@ -71,7 +77,7 @@ export default function LaunchPage() {
         {/* Left: form */}
         <div>
           <div className="glass-card" style={{ padding: 32 }}>
-            <LaunchForm onSuccess={setLastTxHash} />
+            <LaunchForm onSuccess={handleSuccess} />
 
             {lastTxHash && (
               <div
@@ -82,30 +88,63 @@ export default function LaunchPage() {
                   border: '1px solid #bbf7d0',
                   borderRadius: 12,
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
+                  flexDirection: 'column',
                   gap: 12,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <CheckCircle size={18} color="#16a34a" />
-                  <div>
-                    <div style={{ fontSize: 13, color: '#15803d', fontWeight: 600, marginBottom: 2 }}>
-                      Token launched successfully
-                    </div>
-                    <div style={{ fontSize: 12, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>
-                      {lastTxHash.slice(0, 24)}...
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <CheckCircle size={18} color="#16a34a" />
+                    <div>
+                      <div style={{ fontSize: 13, color: '#15803d', fontWeight: 600, marginBottom: 2 }}>
+                        Token launched successfully
+                      </div>
+                      <div style={{ fontSize: 12, color: '#64748b', fontFamily: "'DM Mono', monospace" }}>
+                        {lastTxHash.slice(0, 24)}...
+                      </div>
                     </div>
                   </div>
+                  <a
+                    href={`https://stellar.expert/explorer/testnet/tx/${lastTxHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: '#16a34a', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, textDecoration: 'none', fontWeight: 500, whiteSpace: 'nowrap' }}
+                  >
+                    View tx <ExternalLink size={12} />
+                  </a>
                 </div>
-                <a
-                  href={`https://stellar.expert/explorer/testnet/tx/${lastTxHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: '#16a34a', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, textDecoration: 'none', fontWeight: 500, whiteSpace: 'nowrap' }}
+
+                {/* DEX link */}
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    flexWrap: 'wrap',
+                  }}
                 >
-                  View tx <ExternalLink size={12} />
-                </a>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Droplets size={15} color="#2563eb" />
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1e40af' }}>Create a liquidity pool</div>
+                      <div style={{ fontSize: 11, color: '#3b82f6' }}>List ${lastSymbol} on Stellar's built-in DEX</div>
+                    </div>
+                  </div>
+                  <a
+                    href={`https://stellarterm.com/exchange/${lastSymbol}-testnet/XLM-native`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-primary"
+                    style={{ padding: '7px 14px', fontSize: 12, textDecoration: 'none' }}
+                  >
+                    Open on StellarTerm <ExternalLink size={11} />
+                  </a>
+                </div>
               </div>
             )}
           </div>

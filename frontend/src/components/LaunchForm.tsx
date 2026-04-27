@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Rocket, Info, Loader2, ChevronDown } from 'lucide-react'
+import { Rocket, Info, Loader2, ChevronDown, Wallet } from 'lucide-react'
 import { useLaunchpad } from '../hooks/useLaunchpad'
 import { useWallet } from '../hooks/useWallet'
 import { parseAmount } from '../lib/stellar'
@@ -12,6 +12,7 @@ interface FormState {
   symbol: string
   decimals: number
   initialSupply: string
+  description: string
 }
 
 const INITIAL_FORM: FormState = {
@@ -19,20 +20,21 @@ const INITIAL_FORM: FormState = {
   symbol: '',
   decimals: 7,
   initialSupply: '1000000',
+  description: '',
 }
 
 interface LaunchFormProps {
-  onSuccess?: (txHash: string) => void
+  onSuccess?: (txHash: string, tokenSymbol: string) => void
 }
 
 export default function LaunchForm({ onSuccess }: LaunchFormProps) {
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
-  const [errors, setErrors] = useState<Partial<FormState>>({})
+  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({})
   const { launching, launchToken } = useLaunchpad()
-  const { connected, publicKey } = useWallet()
+  const { connected, publicKey, connect, connecting } = useWallet()
 
   const validate = (): boolean => {
-    const newErrors: Partial<FormState> = {}
+    const newErrors: Partial<Record<keyof FormState, string>> = {}
 
     if (!form.name.trim()) {
       newErrors.name = 'Token name is required'
@@ -77,11 +79,12 @@ export default function LaunchForm({ onSuccess }: LaunchFormProps) {
       )
 
       toast.success('Token launched successfully!')
+      onSuccess?.(txHash, form.symbol.trim().toUpperCase())
       setForm(INITIAL_FORM)
-      onSuccess?.(txHash)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Launch failed')
-    }  }
+    }
+  }
 
   const field = (
     id: keyof FormState,
@@ -123,6 +126,45 @@ export default function LaunchForm({ onSuccess }: LaunchFormProps) {
   return (
     <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {connected && <FundAccountBanner />}
+
+      {/* Wallet connect prompt — shown inline when not connected */}
+      {!connected && (
+        <div
+          style={{
+            padding: '14px 16px',
+            background: '#eff6ff',
+            border: '1.5px solid #bfdbfe',
+            borderRadius: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Wallet size={16} color="#2563eb" />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#1e40af' }}>Wallet not connected</div>
+              <div style={{ fontSize: 12, color: '#3b82f6', marginTop: 1 }}>Connect to launch your token</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              try { await connect() } catch (err) {
+                toast.error(err instanceof Error ? err.message : 'Failed to connect')
+              }
+            }}
+            disabled={connecting}
+            className="btn-primary"
+            style={{ padding: '8px 16px', fontSize: 13 }}
+          >
+            {connecting ? <><Loader2 size={13} className="animate-spin" /> Connecting...</> : <><Wallet size={13} /> Connect Wallet</>}
+          </button>
+        </div>
+      )}
+
       {field('name', 'Token Name', 'e.g. My Awesome Token', `Max ${MAX_TOKEN_NAME_LENGTH} characters`)}
 
       {field(
@@ -139,6 +181,34 @@ export default function LaunchForm({ onSuccess }: LaunchFormProps) {
           },
         },
       )}
+
+      {/* Description */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <label
+          htmlFor="description"
+          style={{ fontSize: 13, fontWeight: 500, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}
+        >
+          Description
+          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 400 }}>(optional)</span>
+          <span title="Describe what your token is for — shown in the explorer." style={{ cursor: 'help', color: '#94a3b8' }}>
+            <Info size={12} />
+          </span>
+        </label>
+        <textarea
+          id="description"
+          className="input-field"
+          placeholder="e.g. A governance token for the XYZ community, used to vote on proposals and earn rewards."
+          value={form.description}
+          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+          disabled={launching}
+          rows={3}
+          maxLength={280}
+          style={{ resize: 'vertical', minHeight: 80, fontFamily: 'inherit' }}
+        />
+        <span style={{ fontSize: 11, color: '#94a3b8', textAlign: 'right' }}>
+          {form.description.length}/280
+        </span>
+      </div>
 
       {/* Decimals */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -168,14 +238,7 @@ export default function LaunchForm({ onSuccess }: LaunchFormProps) {
           </select>
           <ChevronDown
             size={16}
-            style={{
-              position: 'absolute',
-              right: 12,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: '#94a3b8',
-              pointerEvents: 'none',
-            }}
+            style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }}
           />
         </div>
       </div>
@@ -218,6 +281,12 @@ export default function LaunchForm({ onSuccess }: LaunchFormProps) {
               {Number(form.initialSupply).toLocaleString()} {form.symbol.toUpperCase()}
             </span>
           </div>
+          {form.description && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 4, borderTop: '1px solid #e0f2fe' }}>
+              <span style={{ color: '#64748b', fontSize: 12 }}>Description</span>
+              <span style={{ color: '#0f172a', fontSize: 12, lineHeight: 1.5 }}>{form.description}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -228,17 +297,11 @@ export default function LaunchForm({ onSuccess }: LaunchFormProps) {
         style={{ width: '100%', padding: '14px 24px', fontSize: 15, marginTop: 4 }}
       >
         {launching ? (
-          <>
-            <Loader2 size={16} className="animate-spin" />
-            Launching Token...
-          </>
+          <><Loader2 size={16} className="animate-spin" /> Launching Token...</>
         ) : !connected ? (
           'Connect Wallet to Launch'
         ) : (
-          <>
-            <Rocket size={16} />
-            Launch Token
-          </>
+          <><Rocket size={16} /> Launch Token</>
         )}
       </button>
     </form>
