@@ -174,6 +174,15 @@ VITE_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
 
 ---
 
+## User Feedback Collection
+
+We collected feedback from early users via a Google Form. All responses are logged in a shared spreadsheet.
+
+- **Feedback Form** → [forms.gle/HcarPoB6rX9VtcPg7](https://forms.gle/HcarPoB6rX9VtcPg7)
+- **Response Sheet** → [View on Google Sheets](https://docs.google.com/spreadsheets/d/14Bi97BD46B-g7v0mtKbAKyd8vH07ZW-IDepmMK6R6wU/edit?usp=sharing)
+
+---
+
 ## User Feedback & Fixes
 
 Feedback collected from early users. Each issue is tracked with the commit that resolved it.
