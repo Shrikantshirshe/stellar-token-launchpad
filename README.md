@@ -174,7 +174,20 @@ VITE_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
 
 ---
 
-## What's still needed from you
+## User Feedback & Fixes
+
+Feedback collected from early users. Each issue is tracked with the commit that resolved it.
+
+| # | Feedback | Fix | Commit |
+|---|---|---|---|
+| 1 | Filling the form then connecting wallet still shows the same broken state | Added an inline wallet connect prompt inside the form — no need to go to the navbar, connect right there and the form stays filled | [`7fbd527`](https://github.com/Shrikantshirshe/token_launchpad/commit/7fbd5271354022edcbab0f3fd7a9f215f71cf437) |
+| 2 | Integrate with Stellar's built-in DEX to create a liquidity pool after launch | After a successful launch, a DEX card appears with a direct link to StellarTerm to create a liquidity pool for the new token | [`7fbd527`](https://github.com/Shrikantshirshe/token_launchpad/commit/7fbd5271354022edcbab0f3fd7a9f215f71cf437) |
+| 3 | The home page looks very vibe coded, needs more colours or elements | Redesigned homepage with dark hero gradient, coloured feature cards with hover effects, coloured step cards, use-case section, and a gradient CTA banner | [`7fbd527`](https://github.com/Shrikantshirshe/token_launchpad/commit/7fbd5271354022edcbab0f3fd7a9f215f71cf437) |
+| 4 | Give an option to add a description of what the token does | Added an optional Description field (280 chars) to the launch form — shows in the preview before deploying | [`7fbd527`](https://github.com/Shrikantshirshe/token_launchpad/commit/7fbd5271354022edcbab0f3fd7a9f215f71cf437) |
+
+---
+
+
 
 Two things can't be automated:
 
