@@ -10,11 +10,20 @@ import {
 import { signTx } from '../lib/freighter'
 import { LAUNCHPAD_CONTRACT_ID } from '../lib/constants'
 
+export interface VestingParams {
+  beneficiary: string
+  amount: bigint
+  start: bigint
+  cliff: bigint
+  duration: bigint
+}
+
 export interface LaunchTokenParams {
   name: string
   symbol: string
   decimals: number
   initialSupply: bigint
+  vestingParams?: VestingParams
 }
 
 interface UseLaunchpadReturn {
@@ -24,6 +33,38 @@ interface UseLaunchpadReturn {
   fetchTokens: (start: number, limit: number) => Promise<TokenInfo[]>
   fetchCreatorTokens: (creator: string) => Promise<TokenInfo[]>
   fetchLaunchFee: () => Promise<bigint>
+}
+
+/**
+ * Encode VestingParams to ScVal (Map structure or Void/None if undefined).
+ */
+function vestingParamsToScVal(params?: VestingParams): xdr.ScVal {
+  if (!params) {
+    return nativeToScVal(null)
+  }
+  // Soroban maps must have keys sorted alphabetically
+  return xdr.ScVal.scvMap([
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol('amount'),
+      val: nativeToScVal(params.amount, { type: 'i128' }),
+    }),
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol('beneficiary'),
+      val: new Address(params.beneficiary).toScVal(),
+    }),
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol('cliff'),
+      val: nativeToScVal(params.cliff, { type: 'u64' }),
+    }),
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol('duration'),
+      val: nativeToScVal(params.duration, { type: 'u64' }),
+    }),
+    new xdr.ScMapEntry({
+      key: xdr.ScVal.scvSymbol('start'),
+      val: nativeToScVal(params.start, { type: 'u64' }),
+    }),
+  ])
 }
 
 /**
@@ -49,6 +90,7 @@ export function useLaunchpad(): UseLaunchpadReturn {
           nativeToScVal(params.symbol, { type: 'string' }),
           nativeToScVal(params.decimals, { type: 'u32' }),
           nativeToScVal(params.initialSupply, { type: 'i128' }),
+          vestingParamsToScVal(params.vestingParams),
         ]
 
         const unsignedXdr = await buildContractCall(

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Copy, Check, ExternalLink, Loader2 } from 'lucide-react'
+import { ArrowLeft, Copy, Check, ExternalLink, Loader2, Lock, ShieldCheck, FileText, CheckCircle2, Info } from 'lucide-react'
 import { useLaunchpad } from '../hooks/useLaunchpad'
-import { type TokenInfo, formatAmount, shortenAddress } from '../lib/stellar'
+import { useWallet } from '../hooks/useWallet'
+import { type TokenInfo, formatAmount, shortenAddress, readContract, buildContractCall, submitTransaction } from '../lib/stellar'
 import { LAUNCHPAD_CONTRACT_ID } from '../lib/constants'
+import { signTx } from '../lib/freighter'
 import toast from 'react-hot-toast'
 
 const TOKEN_COLORS = [
@@ -15,6 +17,17 @@ const TOKEN_COLORS = [
   { bg: '#fef2f2', text: '#b91c1c', border: '#fecaca' },
 ]
 
+interface VestingData {
+  beneficiary: string
+  start: bigint
+  cliff: bigint
+  duration: bigint
+  totalAmount: bigint
+  released: bigint
+  claimable: bigint
+  vested: bigint
+}
+
 export default function TokenDetailPage() {
   const { address } = useParams<{ address: string }>()
   const [token, setToken] = useState<TokenInfo | null>(null)
@@ -23,6 +36,19 @@ export default function TokenDetailPage() {
   const [copiedAddress, setCopiedAddress] = useState(false)
   const [copiedCreator, setCopiedCreator] = useState(false)
   const { fetchTokens, fetchTokenCount } = useLaunchpad()
+  const { connected, publicKey } = useWallet()
+
+  // Vesting states
+  const [vestingData, setVestingData] = useState<VestingData | null>(null)
+  const [claiming, setClaiming] = useState(false)
+  const [refreshTick, setRefreshTick] = useState(0)
+
+  // SEP-1 toml states
+  const [tomlDomain, setTomlDomain] = useState('')
+  const [tomlLogo, setTomlLogo] = useState('')
+  const [copiedToml, setCopiedToml] = useState(false)
+
+  const triggerRefreshVesting = () => setRefreshTick((t) => t + 1)
 
   useEffect(() => {
     if (!address || !LAUNCHPAD_CONTRACT_ID) {
@@ -35,13 +61,11 @@ export default function TokenDetailPage() {
       setLoading(true)
       setError(null)
       try {
-        // Fetch all tokens to find the one matching this address
         const count = await fetchTokenCount()
         if (count === 0) {
           setError('Token not found')
           return
         }
-        // Fetch in batches of 50 until we find the token
         const batchSize = 50
         for (let start = 0; start < count; start += batchSize) {
           const batch = await fetchTokens(start, Math.min(batchSize, count - start))
@@ -62,6 +86,46 @@ export default function TokenDetailPage() {
     findToken()
   }, [address, fetchTokens, fetchTokenCount])
 
+  useEffect(() => {
+    if (!token || !token.vesting_address) return
+
+    let active = true
+    const fetchVesting = async () => {
+      try {
+        const beneficiary = await readContract<string>(token.vesting_address!, 'beneficiary', [])
+        const start = await readContract<bigint>(token.vesting_address!, 'start', [])
+        const cliff = await readContract<bigint>(token.vesting_address!, 'cliff', [])
+        const duration = await readContract<bigint>(token.vesting_address!, 'duration', [])
+        const totalAmount = await readContract<bigint>(token.vesting_address!, 'total_amount', [])
+        const released = await readContract<bigint>(token.vesting_address!, 'released', [])
+        const claimable = await readContract<bigint>(token.vesting_address!, 'claimable_amount', [])
+        const vested = await readContract<bigint>(token.vesting_address!, 'vested_amount', [])
+
+        if (active) {
+          setVestingData({
+            beneficiary,
+            start,
+            cliff,
+            duration,
+            totalAmount,
+            released,
+            claimable,
+            vested,
+          })
+        }
+      } catch (err) {
+        console.error('Failed to load vesting data:', err)
+      }
+    }
+
+    fetchVesting()
+    const interval = setInterval(fetchVesting, 10000)
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
+  }, [token, refreshTick])
+
   const handleCopy = async (text: string, which: 'address' | 'creator') => {
     await navigator.clipboard.writeText(text)
     if (which === 'address') {
@@ -72,6 +136,51 @@ export default function TokenDetailPage() {
       setTimeout(() => setCopiedCreator(false), 2000)
     }
     toast.success('Copied to clipboard')
+  }
+
+  const handleCopyToml = async () => {
+    if (!token) return
+    const text = `# stellar.toml generated for $${token.symbol}
+# Place this file at: https://${tomlDomain || '<your-domain>'}/.well-known/stellar.toml
+
+[[CURRENCIES]]
+code = "${token.symbol}"
+issuer = "${token.address}"
+display_decimals = ${token.decimals}
+name = "${token.name}"
+${tomlDomain ? `host = "${tomlDomain}"` : '# host = "<your-domain>"'}
+${tomlLogo ? `image = "${tomlLogo}"` : '# image = "<logo-url>"'}`
+
+    await navigator.clipboard.writeText(text)
+    setCopiedToml(true)
+    setTimeout(() => setCopiedToml(false), 2000)
+    toast.success('TOML copied to clipboard')
+  }
+
+  const handleClaimVesting = async () => {
+    if (!connected || !publicKey) {
+      toast.error('Wallet not connected')
+      return
+    }
+    if (!token?.vesting_address || !vestingData) return
+
+    setClaiming(true)
+    try {
+      const unsignedXdr = await buildContractCall(
+        token.vesting_address,
+        'claim',
+        [],
+        publicKey,
+      )
+      const signedXdr = await signTx(unsignedXdr, publicKey)
+      await submitTransaction(signedXdr)
+      toast.success('Vested tokens claimed successfully!')
+      triggerRefreshVesting()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to claim tokens')
+    } finally {
+      setClaiming(false)
+    }
   }
 
   if (loading) {
@@ -420,8 +529,102 @@ export default function TokenDetailPage() {
           </div>
         </div>
 
+        {/* Vesting Dashboard (if enabled) */}
+        {token.vesting_address && (
+          <div className="glass-card" style={{ padding: '24px', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <Lock size={16} color="#2563eb" />
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Token Lockup / Vesting Schedule
+              </span>
+            </div>
+
+            {vestingData ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+                  <div style={{ padding: '12px 14px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Vesting Contract</div>
+                    <code style={{ fontSize: 12, fontFamily: "'DM Mono', monospace", color: '#0f172a', wordBreak: 'break-all' }}>
+                      {token.vesting_address}
+                    </code>
+                  </div>
+                  <div style={{ padding: '12px 14px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Beneficiary</div>
+                    <code style={{ fontSize: 12, fontFamily: "'DM Mono', monospace", color: '#0f172a', wordBreak: 'break-all' }}>
+                      {vestingData.beneficiary}
+                    </code>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                  {[
+                    { label: 'Total Locked', val: formatAmount(vestingData.totalAmount, token.decimals) },
+                    { label: 'Vested (Total)', val: formatAmount(vestingData.vested, token.decimals) },
+                    { label: 'Claimed', val: formatAmount(vestingData.released, token.decimals) },
+                    { label: 'Claimable Now', val: formatAmount(vestingData.claimable, token.decimals), highlight: true },
+                  ].map((item) => (
+                    <div key={item.label} style={{ padding: '10px 12px', background: item.highlight ? '#eff6ff' : '#f8fafc', borderRadius: 8, border: `1px solid ${item.highlight ? '#bfdbfe' : '#e2e8f0'}` }}>
+                      <div style={{ fontSize: 9, color: item.highlight ? '#2563eb' : '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>{item.label}</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', fontFamily: "'DM Mono', monospace" }}>{item.val}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Progress bar */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: '#64748b' }}>Vesting Progress</span>
+                    <span style={{ color: '#0f172a', fontWeight: 600 }}>
+                      {((Number(vestingData.vested) / Number(vestingData.totalAmount)) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div style={{ width: '100%', height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${(Number(vestingData.vested) / Number(vestingData.totalAmount)) * 100}%`,
+                        height: '100%',
+                        background: '#2563eb',
+                        borderRadius: 4,
+                        transition: 'width 0.3s ease',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Claim button */}
+                {publicKey === vestingData.beneficiary ? (
+                  <button
+                    onClick={handleClaimVesting}
+                    disabled={claiming || vestingData.claimable <= 0n}
+                    className="btn-primary"
+                    style={{ width: '100%', padding: '10px 20px', fontSize: 13, justifyContent: 'center' }}
+                  >
+                    {claiming ? (
+                      <><Loader2 size={14} className="animate-spin" /> Claiming...</>
+                    ) : vestingData.claimable <= 0n ? (
+                      'No Claimable Tokens'
+                    ) : (
+                      <><ShieldCheck size={14} /> Claim Vested Tokens ({formatAmount(vestingData.claimable, token.decimals)} ${token.symbol})</>
+                    )}
+                  </button>
+                ) : (
+                  <div style={{ padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, fontSize: 12, color: '#991b1b', display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <Info size={14} />
+                    <span>Only the beneficiary address ({shortenAddress(vestingData.beneficiary, 6)}) can claim these tokens. Connect the correct wallet.</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: '#64748b' }}>
+                <Loader2 size={16} className="animate-spin" />
+                Loading vesting schedule from ledger...
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Inter-contract call info */}
-        <div className="glass-card" style={{ padding: '20px 24px' }}>
+        <div className="glass-card" style={{ padding: '20px 24px', marginBottom: 16 }}>
           <div
             style={{
               fontSize: 11,
@@ -443,7 +646,9 @@ export default function TokenDetailPage() {
               {
                 step: '2',
                 label: 'mint()',
-                desc: `Minted ${Number(formattedSupply).toLocaleString()} ${token.symbol} to creator`,
+                desc: token.vesting_address 
+                  ? `Minted ${Number(formatAmount(token.initial_supply - (vestingData?.totalAmount ?? 0n), token.decimals)).toLocaleString()} ${token.symbol} to creator and locked ${Number(formatAmount(vestingData?.totalAmount ?? 0n, token.decimals)).toLocaleString()} ${token.symbol} in vesting contract`
+                  : `Minted ${Number(formattedSupply).toLocaleString()} ${token.symbol} to creator`,
               },
               {
                 step: '3',
@@ -498,6 +703,112 @@ export default function TokenDetailPage() {
             ))}
           </div>
         </div>
+
+        {/* SEP-1 stellar.toml Generator */}
+        <div className="glass-card" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <FileText size={16} color="#2563eb" />
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              SEP-1 stellar.toml Generator (Wallet Integration)
+            </span>
+          </div>
+
+          <p style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5, marginBottom: 16 }}>
+            To show your token's custom logo and description in wallets like LOBSTR, Freighter, or stellar.expert, you must host a standard <code>stellar.toml</code> metadata file under your home domain. Fill in the optional fields below to live-generate your configuration file.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 12, fontWeight: 500, color: '#374151' }}>Home Domain</label>
+              <input
+                className="input-field"
+                placeholder="e.g. mytoken.com"
+                value={tomlDomain}
+                onChange={(e) => setTomlDomain(e.target.value)}
+                style={{ padding: '8px 12px', fontSize: 13 }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 12, fontWeight: 500, color: '#374151' }}>Logo Image URL (PNG/SVG)</label>
+              <input
+                className="input-field"
+                placeholder="e.g. https://mytoken.com/logo.png"
+                value={tomlLogo}
+                onChange={(e) => setTomlLogo(e.target.value)}
+                style={{ padding: '8px 12px', fontSize: 13 }}
+              />
+            </div>
+          </div>
+
+          <div style={{ position: 'relative', marginTop: 12 }}>
+            <pre
+              style={{
+                background: '#0f172a',
+                color: '#38bdf8',
+                padding: '16px 20px',
+                borderRadius: 8,
+                fontSize: 12,
+                fontFamily: "'DM Mono', monospace",
+                lineHeight: 1.6,
+                overflowX: 'auto',
+                margin: 0,
+              }}
+            >
+              {`# stellar.toml generated for $${token.symbol}
+# Place this file at: https://${tomlDomain || '<your-domain>'}/.well-known/stellar.toml
+
+[[CURRENCIES]]
+code = "${token.symbol}"
+issuer = "${token.address}"
+display_decimals = ${token.decimals}
+name = "${token.name}"
+${tomlDomain ? `host = "${tomlDomain}"` : '# host = "<your-domain>"'}
+${tomlLogo ? `image = "${tomlLogo}"` : '# image = "<logo-url>"'}
+`}
+            </pre>
+            <button
+              onClick={handleCopyToml}
+              className="btn-secondary"
+              style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                padding: '6px 12px',
+                fontSize: 11,
+                background: '#1e293b',
+                color: '#cbd5e1',
+                borderColor: '#334155',
+              }}
+            >
+              {copiedToml ? <Check size={12} color="#16a34a" /> : <Copy size={12} />}
+              {copiedToml ? 'Copied' : 'Copy TOML'}
+            </button>
+          </div>
+
+          <div
+            style={{
+              marginTop: 16,
+              padding: '12px 14px',
+              background: '#fffbeb',
+              border: '1px solid #fde68a',
+              borderRadius: 8,
+              fontSize: 12,
+              color: '#78350f',
+              lineHeight: 1.6,
+            }}
+          >
+            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <CheckCircle2 size={13} color="#d97706" />
+              Hosting Checklist:
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 20 }}>
+              <li>Save this code snippet exactly as <code>stellar.toml</code>.</li>
+              <li>Upload it to your domain's well-known folder: <code>/.well-known/stellar.toml</code>.</li>
+              <li>Configure CORS headers on your server to allow requests from any host (<code>Access-Control-Allow-Origin: *</code>) so wallet apps can fetch it.</li>
+            </ul>
+          </div>
+        </div>
+
       </div>
     </div>
   )

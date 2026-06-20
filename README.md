@@ -335,6 +335,20 @@ Feedback collected from real users via Google Form. All responses logged in the 
 
 ---
 
+## Recently Added Features
+
+> [!NOTE]
+> ### 🔒 Feature 3: Token Vesting & Lockups
+> - **Atomic Deployment**: When launching a token, creators can check a box to enable lockup/vesting. The launchpad contract atomically deploys a fresh `soroban-vesting-contract` and mints the locked portion of the initial supply directly into it, while sending the remainder to the creator.
+> - **Vesting Portal**: On the token detail page, a dedicated portal checks if the token has an associated vesting schedule. Beneficiaries can connect their Freighter wallet to see vesting progress and claim unlocked tokens linearly based on Cliff and Duration.
+>
+> ### 🌐 Feature 6: SEP-1 stellar.toml Generator
+> - **Wallet Recognition**: To integrate with wallets and explorer websites (like LOBSTR or stellar.expert), a generator card has been added to the token detail page.
+> - **TOML Configuration**: Live-generates standard ecosystem configuration properties showing custom logo URLs, home domains, decimal specifications, and display names, with detailed hosting guidelines.
+
+---
+
 ## License
 
 MIT
+

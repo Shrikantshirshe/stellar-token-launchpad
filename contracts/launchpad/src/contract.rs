@@ -16,9 +16,33 @@ mod token {
     );
 }
 
+mod vesting {
+    soroban_sdk::contractimport!(
+        file = "../../target/wasm32v1-none/release/soroban_vesting_contract.wasm"
+    );
+}
+
+use soroban_sdk::contracttype;
+
+#[contracttype]
+#[derive(Clone)]
+pub struct VestingParams {
+    pub beneficiary: Address,
+    pub amount: i128,
+    pub start: u64,
+    pub cliff: u64,
+    pub duration: u64,
+}
+
 pub trait LaunchpadTrait {
-    /// Initialize the launchpad with an admin and the token WASM hash.
-    fn initialize(e: Env, admin: Address, token_wasm_hash: BytesN<32>, launch_fee: i128);
+    /// Initialize the launchpad with an admin and the token & vesting WASM hashes.
+    fn initialize(
+        e: Env,
+        admin: Address,
+        token_wasm_hash: BytesN<32>,
+        vesting_wasm_hash: BytesN<32>,
+        launch_fee: i128,
+    );
 
     /// Deploy a new token contract and initialize it via inter-contract calls.
     /// Returns the address of the newly deployed token.
@@ -29,6 +53,7 @@ pub trait LaunchpadTrait {
         symbol: String,
         decimals: u32,
         initial_supply: i128,
+        vesting_params: Option<VestingParams>,
     ) -> Address;
 
     /// Get info for a specific token by its index.
@@ -58,7 +83,13 @@ pub struct Launchpad;
 
 #[contractimpl]
 impl LaunchpadTrait for Launchpad {
-    fn initialize(e: Env, admin: Address, token_wasm_hash: BytesN<32>, launch_fee: i128) {
+    fn initialize(
+        e: Env,
+        admin: Address,
+        token_wasm_hash: BytesN<32>,
+        vesting_wasm_hash: BytesN<32>,
+        launch_fee: i128,
+    ) {
         if e.storage().instance().has(&DataKey::Admin) {
             panic!("already initialized");
         }
@@ -66,6 +97,9 @@ impl LaunchpadTrait for Launchpad {
         e.storage()
             .instance()
             .set(&DataKey::TokenWasmHash, &token_wasm_hash);
+        e.storage()
+            .instance()
+            .set(&DataKey::VestingWasmHash, &vesting_wasm_hash);
         e.storage()
             .instance()
             .set(&DataKey::LaunchFee, &launch_fee);
@@ -79,6 +113,7 @@ impl LaunchpadTrait for Launchpad {
         symbol: String,
         decimals: u32,
         initial_supply: i128,
+        vesting_params: Option<VestingParams>,
     ) -> Address {
         creator.require_auth();
 
@@ -121,9 +156,57 @@ impl LaunchpadTrait for Launchpad {
             &symbol,
         );
 
-        // Inter-contract call #2: mint initial supply to creator
-        if initial_supply > 0 {
-            token_client.mint(&creator, &initial_supply);
+        let mut vesting_address: Option<Address> = None;
+
+        if let Some(v_params) = vesting_params {
+            if v_params.amount > initial_supply {
+                panic!("vesting amount cannot exceed initial supply");
+            }
+
+            let vesting_wasm_hash: BytesN<32> = e
+                .storage()
+                .instance()
+                .get(&DataKey::VestingWasmHash)
+                .expect("vesting wasm hash not set");
+
+            let mut vesting_salt_bytes = [0u8; 32];
+            vesting_salt_bytes[0] = (count & 0xFF) as u8;
+            vesting_salt_bytes[1] = ((count >> 8) & 0xFF) as u8;
+            vesting_salt_bytes[2] = ((count >> 16) & 0xFF) as u8;
+            vesting_salt_bytes[3] = ((count >> 24) & 0xFF) as u8;
+            vesting_salt_bytes[4] = 1;
+            let vesting_salt = soroban_sdk::BytesN::from_array(&e, &vesting_salt_bytes);
+
+            let v_addr = e
+                .deployer()
+                .with_current_contract(vesting_salt)
+                .deploy_v2(vesting_wasm_hash, ());
+
+            let vesting_client = vesting::Client::new(&e, &v_addr);
+            vesting_client.initialize(
+                &token_address,
+                &v_params.beneficiary,
+                &v_params.start,
+                &v_params.cliff,
+                &v_params.duration,
+                &v_params.amount,
+            );
+
+            // Inter-contract call #2: mint vested portion to vesting contract and remainder to creator
+            if v_params.amount > 0 {
+                token_client.mint(&v_addr, &v_params.amount);
+            }
+            let remainder = initial_supply - v_params.amount;
+            if remainder > 0 {
+                token_client.mint(&creator, &remainder);
+            }
+
+            vesting_address = Some(v_addr);
+        } else {
+            // Mint full supply to creator
+            if initial_supply > 0 {
+                token_client.mint(&creator, &initial_supply);
+            }
         }
 
         // Inter-contract call #3: transfer admin rights to creator
@@ -138,6 +221,7 @@ impl LaunchpadTrait for Launchpad {
             initial_supply,
             creator: creator.clone(),
             created_at: e.ledger().timestamp(),
+            vesting_address,
         };
 
         e.storage()

@@ -27,9 +27,10 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build token WASM first
-        run: cargo build --target wasm32v1-none --release -p soroban-token-contract
-        working-directory: .
+      - name: Build token and vesting WASMs first
+        run: |
+          cargo build --target wasm32v1-none --release -p soroban-token-contract
+          cargo build --target wasm32v1-none --release -p soroban-vesting-contract
 
       - name: Run contract tests
         run: cargo test

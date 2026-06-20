@@ -15,6 +15,7 @@ pub struct TokenInfo {
     pub initial_supply: i128,
     pub creator: Address,
     pub created_at: u64,
+    pub vesting_address: Option<Address>,
 }
 
 #[derive(Clone)]
@@ -30,6 +31,8 @@ pub enum DataKey {
     CreatorTokens(Address),
     /// Token contract WASM hash used for deployment
     TokenWasmHash,
+    /// Vesting contract WASM hash used for deployment
+    VestingWasmHash,
     /// Launch fee in stroops
     LaunchFee,
 }

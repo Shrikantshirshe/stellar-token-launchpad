@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Rocket, Info, Loader2, ChevronDown, Wallet } from 'lucide-react'
+import { Address } from '@stellar/stellar-sdk'
 import { useLaunchpad } from '../hooks/useLaunchpad'
 import { useWallet } from '../hooks/useWallet'
 import { parseAmount } from '../lib/stellar'
@@ -13,6 +14,12 @@ interface FormState {
   decimals: number
   initialSupply: string
   description: string
+  enableVesting: boolean
+  vestingAmount: string
+  vestingBeneficiary: string
+  vestingStartDelay: string
+  vestingCliff: string
+  vestingDuration: string
 }
 
 const INITIAL_FORM: FormState = {
@@ -21,6 +28,12 @@ const INITIAL_FORM: FormState = {
   decimals: 7,
   initialSupply: '1000000',
   description: '',
+  enableVesting: false,
+  vestingAmount: '200000',
+  vestingBeneficiary: '',
+  vestingStartDelay: '0',
+  vestingCliff: '0',
+  vestingDuration: '60',
 }
 
 interface LaunchFormProps {
@@ -54,6 +67,34 @@ export default function LaunchForm({ onSuccess }: LaunchFormProps) {
       newErrors.initialSupply = 'Supply must be greater than 0'
     }
 
+    if (form.enableVesting) {
+      if (!form.vestingBeneficiary.trim()) {
+        newErrors.vestingBeneficiary = 'Beneficiary is required'
+      } else {
+        try {
+          new Address(form.vestingBeneficiary.trim())
+        } catch {
+          newErrors.vestingBeneficiary = 'Invalid public key'
+        }
+      }
+
+      if (!form.vestingAmount || Number(form.vestingAmount) <= 0) {
+        newErrors.vestingAmount = 'Amount must be greater than 0'
+      } else if (Number(form.vestingAmount) > Number(form.initialSupply)) {
+        newErrors.vestingAmount = 'Cannot exceed initial supply'
+      }
+
+      if (Number(form.vestingStartDelay) < 0) {
+        newErrors.vestingStartDelay = 'Cannot be negative'
+      }
+      if (Number(form.vestingCliff) < 0) {
+        newErrors.vestingCliff = 'Cannot be negative'
+      }
+      if (!form.vestingDuration || Number(form.vestingDuration) <= 0) {
+        newErrors.vestingDuration = 'Must be greater than 0'
+      }
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -68,12 +109,31 @@ export default function LaunchForm({ onSuccess }: LaunchFormProps) {
 
     try {
       const supplyBigInt = parseAmount(form.initialSupply, form.decimals)
+      let vestingParams = undefined
+
+      if (form.enableVesting) {
+        const vestingAmtBigInt = parseAmount(form.vestingAmount, form.decimals)
+        const currentTimestampSec = BigInt(Math.floor(Date.now() / 1000))
+        const startDelaySec = BigInt(Math.floor(Number(form.vestingStartDelay) * 60))
+        const cliffSec = BigInt(Math.floor(Number(form.vestingCliff) * 60))
+        const durationSec = BigInt(Math.floor(Number(form.vestingDuration) * 60))
+
+        vestingParams = {
+          beneficiary: form.vestingBeneficiary.trim(),
+          amount: vestingAmtBigInt,
+          start: currentTimestampSec + startDelaySec,
+          cliff: cliffSec,
+          duration: durationSec,
+        }
+      }
+
       const txHash = await launchToken(
         {
           name: form.name.trim(),
           symbol: form.symbol.trim().toUpperCase(),
           decimals: form.decimals,
           initialSupply: supplyBigInt,
+          vestingParams,
         },
         publicKey,
       )
@@ -93,7 +153,7 @@ export default function LaunchForm({ onSuccess }: LaunchFormProps) {
     hint?: string,
     extra?: React.InputHTMLAttributes<HTMLInputElement>,
   ) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
       <label
         htmlFor={id}
         style={{ fontSize: 13, fontWeight: 500, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}
@@ -109,7 +169,7 @@ export default function LaunchForm({ onSuccess }: LaunchFormProps) {
         id={id}
         className="input-field"
         placeholder={placeholder}
-        value={form[id] as string}
+        value={form[id] as string | number}
         onChange={(e) => {
           setForm((f) => ({ ...f, [id]: e.target.value }))
           if (errors[id]) setErrors((er) => ({ ...er, [id]: undefined }))
@@ -251,6 +311,57 @@ export default function LaunchForm({ onSuccess }: LaunchFormProps) {
         { type: 'number', min: '1', step: '1' },
       )}
 
+      {/* Vesting toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+        <input
+          type="checkbox"
+          id="enableVesting"
+          checked={form.enableVesting}
+          onChange={(e) => {
+            setForm((f) => ({ ...f, enableVesting: e.target.checked }))
+          }}
+          disabled={launching}
+          style={{ width: 16, height: 16, cursor: 'pointer' }}
+        />
+        <label
+          htmlFor="enableVesting"
+          style={{ fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+        >
+          Enable Token Lockup/Vesting
+          <span title="Lock a portion of the supply in a vesting contract to release linearly over time." style={{ cursor: 'help', color: '#94a3b8' }}>
+            <Info size={12} />
+          </span>
+        </label>
+      </div>
+
+      {form.enableVesting && (
+        <div
+          style={{
+            padding: '20px 18px',
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+          }}
+        >
+          <div style={{ fontSize: 12, color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Vesting Schedule Configuration
+          </div>
+
+          {field('vestingBeneficiary', 'Beneficiary Address (G...)', 'Stellar public key that can claim vested tokens')}
+          
+          {field('vestingAmount', 'Vested Amount', 'e.g. 200000', 'Amount of tokens locked in the vesting contract', { type: 'number', min: '1' })}
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {field('vestingStartDelay', 'Start Delay (mins)', 'e.g. 0', 'Minutes before vesting begins', { type: 'number', min: '0' })}
+            {field('vestingCliff', 'Cliff Period (mins)', 'e.g. 0', 'Minutes before first release is claimable', { type: 'number', min: '0' })}
+            {field('vestingDuration', 'Duration (mins)', 'e.g. 60', 'Total minutes to vest linearly', { type: 'number', min: '1' })}
+          </div>
+        </div>
+      )}
+
       {/* Preview */}
       {form.name && form.symbol && form.initialSupply && (
         <div
@@ -281,6 +392,20 @@ export default function LaunchForm({ onSuccess }: LaunchFormProps) {
               {Number(form.initialSupply).toLocaleString()} {form.symbol.toUpperCase()}
             </span>
           </div>
+          {form.enableVesting && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 4, borderTop: '1px dashed #bae6fd' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <span style={{ color: '#0369a1', fontWeight: 500 }}>Vested Lockup</span>
+                <span style={{ color: '#0369a1', fontWeight: 600 }}>
+                  {Number(form.vestingAmount).toLocaleString()} {form.symbol.toUpperCase()} ({((Number(form.vestingAmount) / Number(form.initialSupply)) * 100).toFixed(0)}%)
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b' }}>
+                <span>Cliff / Duration</span>
+                <span>{form.vestingCliff} mins / {form.vestingDuration} mins</span>
+              </div>
+            </div>
+          )}
           {form.description && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 4, borderTop: '1px solid #e0f2fe' }}>
               <span style={{ color: '#64748b', fontSize: 12 }}>Description</span>

@@ -31,6 +31,7 @@ curl -s "https://friendbot.stellar.org?addr=$ADMIN_ADDRESS" > /dev/null && echo 
 echo ""
 echo "🔨 Building contracts..."
 stellar contract build --manifest-path Cargo.toml --package soroban-token-contract
+stellar contract build --manifest-path Cargo.toml --package soroban-vesting-contract
 stellar contract build --manifest-path Cargo.toml --package soroban-launchpad-contract
 echo "   ✅ Build complete"
 
@@ -42,6 +43,15 @@ TOKEN_WASM_HASH=$(stellar contract upload \
   --source deployer \
   --wasm target/wasm32v1-none/release/soroban_token_contract.wasm)
 echo "   Token WASM hash: $TOKEN_WASM_HASH"
+
+# ── Upload vesting WASM ────────────────────────────────────────────────────────
+echo ""
+echo "📤 Uploading vesting contract WASM..."
+VESTING_WASM_HASH=$(stellar contract upload \
+  --network "$NETWORK" \
+  --source deployer \
+  --wasm target/wasm32v1-none/release/soroban_vesting_contract.wasm)
+echo "   Vesting WASM hash: $VESTING_WASM_HASH"
 
 # ── Deploy launchpad contract ──────────────────────────────────────────────────
 echo ""
@@ -62,6 +72,7 @@ stellar contract invoke \
   -- initialize \
   --admin "$ADMIN_ADDRESS" \
   --token_wasm_hash "$TOKEN_WASM_HASH" \
+  --vesting_wasm_hash "$VESTING_WASM_HASH" \
   --launch_fee 0
 echo "   ✅ Launchpad initialized"
 

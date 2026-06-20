@@ -19,6 +19,7 @@ export interface TokenInfo {
   initial_supply: bigint
   creator: string
   created_at: bigint
+  vesting_address?: string
 }
 
 /**
@@ -163,6 +164,7 @@ export function parseTokenInfo(raw: Record<string, unknown>): TokenInfo {
     initial_supply: BigInt(String(raw.initial_supply ?? '0')),
     creator: String(raw.creator ?? ''),
     created_at: BigInt(String(raw.created_at ?? '0')),
+    vesting_address: raw.vesting_address ? String(raw.vesting_address) : undefined,
   }
 }
 
