@@ -22,10 +22,9 @@ The whole thing — deploy, initialize, mint, transfer admin — happens atomica
 
 | | |
 |---|---|
-| **Launchpad contract** | [`CD7EJEMPI3RVAA2XJ4WSP7265QWC5VXOAJW32UJWDYECZKYGZIWE7QBW`](https://stellar.expert/explorer/testnet/contract/CD7EJEMPI3RVAA2XJ4WSP7265QWC5VXOAJW32UJWDYECZKYGZIWE7QBW) |
-| **Deploy transaction** | [`10791934...`](https://stellar.expert/explorer/testnet/tx/10791934e9bdc235ed902cf80f2558dd336e110fe467a66a430d3640404d9dc8) |
-| **Initialize transaction** | [`4c2da5b9...`](https://stellar.expert/explorer/testnet/tx/4c2da5b9b50f77a476fa20a5b6ad75986b86010f87aab9a78b0e3e0ee0b4a79b) |
-| **Example token launch tx** | [`e8d6d707...`](https://stellar.expert/explorer/testnet/tx/e8d6d707e2916adfa16e46c1d2cc6bc8789fb3624c3117a7f974371362575beb) |
+| **Launchpad contract** | [`CCTHMDUWMHDFJYBAWFJAPAM2C6DVUII53LOQYW57JNXL37SH27JUYIXH`](https://stellar.expert/explorer/testnet/contract/CCTHMDUWMHDFJYBAWFJAPAM2C6DVUII53LOQYW57JNXL37SH27JUYIXH) |
+| **Deploy transaction** | [`d0e7142d...`](https://stellar.expert/explorer/testnet/tx/d0e7142dc801a09f99d639e1786f2b6bf569e92a0aeb043e157ea5b63c20bcff) |
+| **Initialize transaction** | [`916779c9...`](https://stellar.expert/explorer/testnet/tx/916779c9df8aea8f24bfe4df5d775b0faec7131c4c32f8e31301b43824614b0c) |
 | **Network** | Stellar Testnet |
 | **RPC** | `https://soroban-testnet.stellar.org` |
 
