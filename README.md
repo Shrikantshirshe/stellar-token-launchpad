@@ -2,7 +2,7 @@
 
 Deploy a real SEP-41 token on Stellar Testnet in under two minutes. No CLI, no config files, no prior blockchain experience needed. Just connect your wallet, fill out a form, and your token is live.
 
-**Live app → [stellar-token-launchpad.vercel.app](https://stellar-token-launchpad.vercel.app)**
+**Live app → [frontend-five-ochre-90.vercel.app](https://frontend-five-ochre-90.vercel.app)**
 
 ![CI](https://github.com/Shrikantshirshe/token_launchpad/actions/workflows/ci.yml/badge.svg)
 
